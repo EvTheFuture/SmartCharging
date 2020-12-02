@@ -51,7 +51,7 @@ charge_ev_when_cheepest:
     debug: yes
 """
 
-VERSION = 0.16
+VERSION = 0.17
 
 # Store all attributes every day to disk
 STORE_TO_FILE_EVERY = 60 * 60 * 24
@@ -373,7 +373,6 @@ class SmartCharging(hass.Hass):
             if length > self.charge_time_needed:
                 break
 
-        self.status_attributes["slots"] = slots
 
         if not len(slots):
             self.log("We don't need any slots...")
@@ -381,6 +380,7 @@ class SmartCharging(hass.Hass):
             self.status_attributes["reason"] = "No slots needed"
             self.status_attributes["next_start"] = ""
             self.status_attributes["next_stop"] = ""
+            self.status_attributes["slots"] = []
             self.update_status_entity()
             self.start_charging()
             return
@@ -389,6 +389,8 @@ class SmartCharging(hass.Hass):
         slots = sorted(slots, key=lambda i: i["start"])
 
         self.debug(f"WE NEED THESE SLOTS: {slots} ({length})")
+
+        self.status_attributes["slots"] = slots
 
         now = self.datetime(aware=True)
         slot = slots[0]
