@@ -51,13 +51,15 @@ charge_ev_when_cheepest:
     debug: yes
 """
 
-VERSION = 0.17
+VERSION = 0.18
 
 # Store all attributes every day to disk
 STORE_TO_FILE_EVERY = 60 * 60 * 24
 
 DELAY_AFTER_STATE_CHANGE = 2.0
 MAX_TIME_FOR_WORKER_TO_SLEEP = 3600  # 1 hour
+RETRY_AFTER_FAILURE = 60  # 1 minute
+
 ENTITIES = {
     "~_active": {
         "type": "switch",
@@ -84,6 +86,7 @@ import queue
 import threading
 
 from datetime import datetime
+from datetime import timedelta
 from datetime import time
 from dateutil import parser
 from dateutil import tz
@@ -181,7 +184,9 @@ class SmartCharging(hass.Hass):
             self.data = {}
 
         except Exception as e:
-            self.error(f"Exception when loading persistance file: {e}")
+            self.get_main_log().exception(
+                "Unexpected exception when loading persistance file..."
+            )
             self.data = {}
 
         for k, v in ENTITIES.items():
@@ -197,11 +202,20 @@ class SmartCharging(hass.Hass):
             self.log(f"Persistance entries written to {self.persistance_file}")
 
         except Exception as e:
-            self.error(f"Exception when storing persistance file: {e}")
+            self.get_main_log().exception(
+                "Unexpected exception when storing persistence file..."
+            )
             return False
 
     def debug(self, text):
         self.get_main_log().debug(text)
+
+    def get_friendly_date(self, in_date):
+        today = self.datetime(aware=True).date().today()
+        tomorrow = today + timedelta(days = 1) 
+        i = in_date.date()
+
+        return "Today" if i == today else "Tomorrow" if i == tomorrow else i
 
     def initialize_entities(self):
         self.debug("Setting up entities")
@@ -247,9 +261,10 @@ class SmartCharging(hass.Hass):
     def worker_thread(self):
         while not self.abort:
             try:
-                self.calculate()
+                retry = self.calculate()
             except Exception as e:
                 self.get_main_log().exception("Unexpected exception...")
+                retry = True
 
             # Just to make sure we cant get a negative number
             # we store the time before creating the price list
@@ -262,6 +277,9 @@ class SmartCharging(hass.Hass):
                     sleep_time = MAX_TIME_FOR_WORKER_TO_SLEEP
             else:
                 sleep_time = MAX_TIME_FOR_WORKER_TO_SLEEP
+
+            if retry and sleep_time > RETRY_AFTER_FAILURE:
+                sleep_time = RETRY_AFTER_FAILURE
 
             time_when_going_to_sleep = self.datetime(aware=True)
             self.debug(f"Will try to sleep for {sleep_time} seconds")
@@ -288,14 +306,14 @@ class SmartCharging(hass.Hass):
             self.status_state = "inactive"
             self.status_attributes["reason"] = "Inactivated by user"
             self.update_status_entity()
-            return
+            return True
 
         if self.get_entity_value(self.args["device_tracker"]) != "home":
             self.debug("EV is not home, aborting calculation...")
             self.status_state = "disabled"
             self.status_attributes["reason"] = "EV is not home"
             self.update_status_entity()
-            return
+            return True
 
         cs = self.get_entity_value(self.args["charging_state"]).lower()
         tl = self.get_entity_value(self.args["time_left"])
@@ -313,49 +331,81 @@ class SmartCharging(hass.Hass):
             self.status_attributes["next_stop"] = ""
             self.status_attributes["slots"] = []
             self.update_status_entity()
-            return
+            return True
 
         if self.charge_time_needed is not None:
             self.status_attributes[
                 "charge_time_left"
             ] = self.charge_time_needed
 
-        self.start_stop_charging()
+        return self.start_stop_charging()
 
     def start_charging(self):
-        self.call_service(
-            "homeassistant/turn_on", entity_id=self.args["charger_switch"]
-        )
+        try:
+            self.call_service(
+                "homeassistant/turn_on", entity_id=self.args["charger_switch"]
+            )
+            return True
+
+        except Exception as e:
+            self.get_main_log().exception(
+                "Unexpected exception when calling service..."
+            )
+            return False
 
     def stop_charging(self):
-        self.call_service(
-            "homeassistant/turn_off", entity_id=self.args["charger_switch"]
-        )
+        try:
+            self.call_service(
+                "homeassistant/turn_off", entity_id=self.args["charger_switch"]
+            )
+            return True
+
+        except Exception as e:
+            self.get_main_log().exception(
+                "Unexpected exception when calling service..."
+            )
+            return False
 
     def start_stop_charging(self):
         if self.charge_time_needed is None:
-            self.start_charging()
             self.log("Starting to charge to calculate time needed")
-            self.status_state = "calculating"
-            self.status_attributes["reason"] = "Asking EV for time left"
             self.status_attributes["charge_time_left"] = "unknown"
             self.status_attributes["next_start"] = ""
             self.status_attributes["next_stop"] = ""
             self.status_attributes["slots"] = []
-            self.update_status_entity()
-            return
+
+            if not self.start_charging():
+                self.status_state = "error"
+                self.status_attributes["reason"] = (
+                    "Unable to communicate with EV"
+                )
+                self.update_status_entity()
+                return False
+            else:
+                self.status_state = "calculating"
+                self.status_attributes["reason"] = "Asking EV for time left"
+                self.update_status_entity()
+                return True
 
         price = self.get_price()
         if price is None:
             self.log("We don't have required prices, aborting...")
-            self.status_state = "stopped"
-            self.status_attributes["reason"] = "Missing price info"
             self.status_attributes["next_start"] = ""
             self.status_attributes["next_stop"] = ""
             self.status_attributes["slots"] = []
-            self.update_status_entity()
-            self.stop_charging()
-            return
+
+            if not self.stop_charging():
+                self.status_state = "error"
+                self.status_attributes["reason"] = (
+                    "Unable to communicate with EV"
+                )
+                self.update_status_entity()
+                return False
+            else:
+                self.status_state = "stopped"
+                self.status_attributes["reason"] = "Missing price info"
+                self.update_status_entity()
+                return True
 
         self.debug(f"We need {self.charge_time_needed} seconds to charge")
 
@@ -373,7 +423,6 @@ class SmartCharging(hass.Hass):
             if length > self.charge_time_needed:
                 break
 
-
         if not len(slots):
             self.log("We don't need any slots...")
             self.status_state = "no slots"
@@ -382,15 +431,29 @@ class SmartCharging(hass.Hass):
             self.status_attributes["next_stop"] = ""
             self.status_attributes["slots"] = []
             self.update_status_entity()
-            self.start_charging()
-            return
+            return self.start_charging()
 
         # Make sure we have the slots in time order
         slots = sorted(slots, key=lambda i: i["start"])
 
         self.debug(f"WE NEED THESE SLOTS: {slots} ({length})")
 
-        self.status_attributes["slots"] = slots
+        friendly_slots = []
+        for s in slots:
+            slot = {
+                "start": (
+                    self.get_friendly_date(s["start"]) + 
+                    " at " + s["start"].strftime("%H:%M")
+                ),
+                "end": (
+                    self.get_friendly_date(s["end"]) + 
+                    " at " + s["end"].strftime("%H:%M")
+                ),
+                "price": s["price"],
+            }
+            friendly_slots.append(slot)
+
+        self.status_attributes["slots"] = friendly_slots
 
         now = self.datetime(aware=True)
         slot = slots[0]
@@ -409,13 +472,14 @@ class SmartCharging(hass.Hass):
         if slot["start"] < now < slot["end"]:
             self.start_charging()
             self.status_state = "charging"
-            self.status_attributes["reason"] = "Inside of low rate time slot"
+            self.status_attributes["reason"] = "Current rate is low"
         else:
             self.stop_charging()
             self.status_state = "stopped"
-            self.status_attributes["reason"] = "Outside of low rate time slot"
+            self.status_attributes["reason"] = "Current rate to high"
 
         self.update_status_entity()
+        return True
 
     def convert_time_to_seconds(self, time_str):
         seconds = 0
