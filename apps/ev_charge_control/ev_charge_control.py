@@ -51,7 +51,7 @@ charge_ev_when_cheepest:
     debug: yes
 """
 
-VERSION = 0.12
+VERSION = 0.15
 
 # Store all attributes every day to disk
 STORE_TO_FILE_EVERY = 60 * 60 * 24
@@ -253,7 +253,7 @@ class SmartCharging(hass.Hass):
 
             # Just to make sure we cant get a negative number
             # we store the time before creating the price list
-            now = self.get_now()
+            now = self.datetime(aware=True)
 
             price = self.get_price()
             if price is not None and len(price):
@@ -263,14 +263,14 @@ class SmartCharging(hass.Hass):
             else:
                 sleep_time = MAX_TIME_FOR_WORKER_TO_SLEEP
 
-            time_when_going_to_sleep = self.get_now()
+            time_when_going_to_sleep = self.datetime(aware=True)
             self.debug(f"Will try to sleep for {sleep_time} seconds")
             self.worker_thread_event.wait(sleep_time)
 
             self.worker_thread_event.clear()
 
             time_slept = (
-                self.get_now() - time_when_going_to_sleep
+                self.datetime(aware=True) - time_when_going_to_sleep
             ).total_seconds()
 
             self.debug(
@@ -316,7 +316,9 @@ class SmartCharging(hass.Hass):
             return
 
         if self.charge_time_needed is not None:
-            self.status_attributes["charge_time_left"] = self.charge_time_needed
+            self.status_attributes[
+                "charge_time_left"
+            ] = self.charge_time_needed
 
         self.start_stop_charging()
 
@@ -371,7 +373,7 @@ class SmartCharging(hass.Hass):
             if length > self.charge_time_needed:
                 break
 
-        self.status_attributes["slots"] = slots 
+        self.status_attributes["slots"] = slots
 
         if not len(slots):
             self.log("We don't need any slots...")
@@ -388,7 +390,7 @@ class SmartCharging(hass.Hass):
 
         self.debug(f"WE NEED THESE SLOTS: {slots} ({length})")
 
-        now = self.get_now()
+        now = self.datetime(aware=True)
         slot = slots[0]
 
         # Try to find the next time charging will stop
@@ -457,9 +459,8 @@ class SmartCharging(hass.Hass):
         if "price_data" not in self.args:
             return None
 
-        now = self.get_now()
-        # TODO, fix TZ
-        midnight_today = datetime.now(tz.gettz("CET")).replace(
+        now = self.datetime(aware=True)
+        midnight_today = self.datetime(aware=True).replace(
             hour=0, minute=0, second=0, microsecond=0
         )
 
@@ -473,6 +474,7 @@ class SmartCharging(hass.Hass):
             # add 24h to the must be done by (since we have passed the time
             # today already)
             must_be_done_by += 24 * 3600
+            self.log(f"Required end time already passed. Adding 24 hours.")
 
         future_prices = []
         prices = []
@@ -482,14 +484,31 @@ class SmartCharging(hass.Hass):
             e, a = self.get_entity_and_attribute(pd["entity"])
             part = self.get_state(entity_id=e, attribute=a)
 
-            # Bail out if we miss data that is required
-            if "required" in pd and pd["required"] and not len(part):
-                self.log(
-                    f"Missing required price info {pd['entity']}.{pd['attribute']}"
-                )
-                return None
-
             prices += part
+
+            # Bail out if we miss data that is required
+            if "required" in pd and pd["required"]:
+                if not len(part):
+                    self.log(
+                        f"Missing required price info "
+                        "{pd['entity']}.{pd['attribute']}"
+                    )
+                    return None
+
+                for i in part:
+                    if not "value" in i or i["value"] is None:
+                        if must_be_done_by is not None:
+                            start = parser.parse(i["start"])
+                            from_midnight = int(
+                                (start - midnight_today).total_seconds()
+                            )
+
+                            # If time has not yet passed, accept value
+                            if must_be_done_by < from_midnight:
+                                continue
+
+                        self.log(f"Missing required price value {i}")
+                        return None
 
         # Sort prices based on start time
         prices = sorted(prices, key=lambda i: i["start"])
@@ -557,4 +576,3 @@ class SmartCharging(hass.Hass):
             state=self.status_state,
             attributes=self.status_attributes,
         )
-
