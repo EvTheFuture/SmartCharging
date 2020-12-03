@@ -51,7 +51,7 @@ charge_ev_when_cheepest:
     debug: yes
 """
 
-VERSION = 0.19
+VERSION = 0.20
 
 # Store all attributes every day to disk
 STORE_TO_FILE_EVERY = 60 * 60 * 24
@@ -212,7 +212,7 @@ class SmartCharging(hass.Hass):
 
     def get_friendly_date(self, in_date):
         today = self.datetime(aware=True).date().today()
-        tomorrow = today + timedelta(days = 1) 
+        tomorrow = today + timedelta(days=1)
         i = in_date.date()
 
         return "Today" if i == today else "Tomorrow" if i == tomorrow else i
@@ -376,9 +376,9 @@ class SmartCharging(hass.Hass):
 
             if not self.start_charging():
                 self.status_state = "error"
-                self.status_attributes["reason"] = (
-                    "Unable to communicate with EV"
-                )
+                self.status_attributes[
+                    "reason"
+                ] = "Unable to communicate with EV"
                 self.update_status_entity()
                 return False
             else:
@@ -396,9 +396,9 @@ class SmartCharging(hass.Hass):
 
             if not self.stop_charging():
                 self.status_state = "error"
-                self.status_attributes["reason"] = (
-                    "Unable to communicate with EV"
-                )
+                self.status_attributes[
+                    "reason"
+                ] = "Unable to communicate with EV"
                 self.update_status_entity()
                 return False
             else:
@@ -442,12 +442,14 @@ class SmartCharging(hass.Hass):
         for s in slots:
             slot = {
                 "start": (
-                    self.get_friendly_date(s["start"]) + 
-                    " at " + s["start"].strftime("%H:%M")
+                    self.get_friendly_date(s["start"])
+                    + " at "
+                    + s["start"].strftime("%H:%M")
                 ),
                 "end": (
-                    self.get_friendly_date(s["end"]) + 
-                    " at " + s["end"].strftime("%H:%M")
+                    self.get_friendly_date(s["end"])
+                    + " at "
+                    + s["end"].strftime("%H:%M")
                 ),
                 "price": s["price"],
             }
@@ -466,8 +468,16 @@ class SmartCharging(hass.Hass):
 
             end_time = s["end"]
 
-        self.status_attributes["next_start"] = slot["start"].ctime()
-        self.status_attributes["next_stop"] = end_time.ctime()
+        self.status_attributes["next_start"] = (
+            self.get_friendly_date(slot["start"])
+            + " at "
+            + slot["start"].strftime("%H:%M")
+        )
+        self.status_attributes["next_stop"] = (
+            self.get_friendly_date(end_time)
+            + " at "
+            + end_time.strftime("%H:%M")
+        )
 
         if slot["start"] < now < slot["end"]:
             self.start_charging()
@@ -582,7 +592,11 @@ class SmartCharging(hass.Hass):
                 (end - midnight_today).total_seconds()
             )
 
-            if missing_price_info and must_be_done_by >= start_from_midnight_today and must_be_done_by <= end_from_midnight_today:
+            if (
+                missing_price_info
+                and must_be_done_by >= start_from_midnight_today
+                and must_be_done_by <= end_from_midnight_today
+            ):
                 missing_price_info = False
 
             seconds_until_start = int((start - now).total_seconds())
