@@ -51,7 +51,7 @@ charge_ev_when_cheepest:
     debug: yes
 """
 
-VERSION = 0.20
+VERSION = 0.35
 
 # Store all attributes every day to disk
 STORE_TO_FILE_EVERY = 60 * 60 * 24
@@ -102,6 +102,8 @@ class SmartCharging(hass.Hass):
 
         self.log("Starting....")
 
+        self.event_listeners = []
+
         self.status_state = "uknown"
         self.status_attributes = copy.deepcopy(
             ENTITIES["~_status"]["attributes"]
@@ -110,8 +112,7 @@ class SmartCharging(hass.Hass):
         # This is the file where we store current states
         # between restarts for this app
         self.persistance_file = (
-            f"{self.config['config_dir']}/apps/{self.args['module']}/"
-            + f"{self.name}.json"
+            __file__.rsplit("/", 1)[0] + f"/{self.name}.json"
         )
 
         self.load_persistance_file()
@@ -164,6 +165,10 @@ class SmartCharging(hass.Hass):
         self.save_persistance_file()
 
         self.abort = True
+
+        # Remove all event listeners
+        for l in self.event_listeners:
+            self.cancel_listen_event(l)
 
         # Inform the worker thread to wake up
         self.worker_thread_event.set()
@@ -227,7 +232,17 @@ class SmartCharging(hass.Hass):
             self.set_state(
                 entity_id, state=self.data[k], attributes=v["attributes"],
             )
-            self.debug("Created entity")
+            self.debug(f"Created entity {entity_id}")
+
+            if v["type"] == "switch":
+                self.event_listeners.append(
+                    self.listen_event(
+                        self.handle_incoming_event,
+                        "call_service",
+                        entity_id=entity_id,
+                    )
+                )
+                self.debug(f"Registered service call handler for {entity_id}")
 
     def get_entity_value(self, entity):
         e, a = self.get_entity_and_attribute(entity)
@@ -239,16 +254,41 @@ class SmartCharging(hass.Hass):
 
         self.listen_state(callback=self.new_state, entity=e, attribute=a)
 
+    def handle_incoming_event(self, event_name, data, kwargs):
+        self.debug(f"event: {event_name} d: {data} kwa: {kwargs})")
+
+        try:
+            if event_name == "call_service":
+                if data["domain"] == "switch":
+                    entity_id = data["service_data"]["entity_id"]
+                    data_key = entity_id.replace("switch." + self.name, "~")
+
+                    if data_key in self.data:
+                        # When we set the state, self.new_state will be
+                        # triggered and the actual internal state will be
+                        # updated properly
+                        self.set_state(
+                            entity=entity_id,
+                            state=data["service"].replace("turn_", ""),
+                            attributes=self.status_attributes,
+                        )
+        except Exception as e:
+            self.get_main_log.exception(f"Exception when handling event")
+
     def new_state(self, entity, attribute, old, new, kwargs):
         self.debug(f"NEW STATE!! {entity}.{attribute} = {new} ({old})")
-
-        if entity.endswith(self.name + "_active"):
-            self.data["~_active"] = new
 
         # Delay trigger to avoid multiple calculations when multiple entities
         # change at the same time
         if self.run_calculations_handle is not None:
             self.cancel_timer(self.run_calculations_handle)
+
+        if entity.endswith(self.name + "_active"):
+            self.data["~_active"] = new
+            if new == "off":
+                self.debug("Trigger Calculations Immedietly...")
+                self.trigger_calculation()
+                return
 
         self.debug("Scheduling Calculations...")
         self.run_calculations_handle = self.run_in(
