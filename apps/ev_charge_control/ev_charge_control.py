@@ -51,7 +51,7 @@ charge_ev_when_cheepest:
     debug: yes
 """
 
-VERSION = 0.18
+VERSION = 0.19
 
 # Store all attributes every day to disk
 STORE_TO_FILE_EVERY = 60 * 60 * 24
@@ -261,7 +261,7 @@ class SmartCharging(hass.Hass):
     def worker_thread(self):
         while not self.abort:
             try:
-                retry = self.calculate()
+                retry = not self.calculate()
             except Exception as e:
                 self.get_main_log().exception("Unexpected exception...")
                 retry = True
@@ -545,41 +545,28 @@ class SmartCharging(hass.Hass):
         future_prices = []
         prices = []
 
+        missing_price_info = False
+
         # merge all prices (today and tomorrow)
         for pd in self.args["price_data"]:
             e, a = self.get_entity_and_attribute(pd["entity"])
             part = self.get_state(entity_id=e, attribute=a)
 
-            prices += part
-
             # Bail out if we miss data that is required
             if "required" in pd and pd["required"]:
                 if not len(part):
-                    self.log(
-                        f"Missing required price info "
-                        "{pd['entity']}.{pd['attribute']}"
-                    )
-                    return None
+                    missing_price_info = True
+                    continue
 
-                for i in part:
-                    if not "value" in i or i["value"] is None:
-                        if must_be_done_by is not None:
-                            start = parser.parse(i["start"])
-                            from_midnight = int(
-                                (start - midnight_today).total_seconds()
-                            )
-
-                            # If time has not yet passed, accept value
-                            if must_be_done_by < from_midnight:
-                                continue
-
-                        self.log(f"Missing required price value {i}")
-                        return None
+            prices += part
 
         # Sort prices based on start time
         prices = sorted(prices, key=lambda i: i["start"])
 
         for p in prices:
+            if p["value"] is None:
+                continue
+
             start = parser.parse(p["start"])
             end = parser.parse(p["end"])
 
@@ -594,6 +581,9 @@ class SmartCharging(hass.Hass):
             end_from_midnight_today = int(
                 (end - midnight_today).total_seconds()
             )
+
+            if missing_price_info and must_be_done_by >= start_from_midnight_today and must_be_done_by <= end_from_midnight_today:
+                missing_price_info = False
 
             seconds_until_start = int((start - now).total_seconds())
 
@@ -631,6 +621,9 @@ class SmartCharging(hass.Hass):
                     "price": p["value"],
                 }
             )
+
+        if missing_price_info:
+            self.debug("Missing required price info")
 
         return future_prices
 
