@@ -51,7 +51,7 @@ charge_ev_when_cheepest:
     debug: yes
 """
 
-VERSION = "0.42 alpha"
+VERSION = "0.43 alpha"
 
 # Store all attributes every day to disk
 STORE_TO_FILE_EVERY = 60 * 60 * 24
@@ -283,7 +283,7 @@ class SmartCharging(hass.Hass):
                             self.set_state(
                                 entity=kwargs["entity_id"],
                                 state=data["service"].replace("turn_", ""),
-                                attributes=self.data[key]["attributes"],
+                                attributes=ENTITIES[key]["attributes"],
                             )
         except Exception as e:
             self.get_main_log().exception(f"Exception when handling event")
