@@ -256,8 +256,6 @@ class SmartCharging(hass.Hass):
         self.listen_state(callback=self.new_state, entity=e, attribute=a)
 
     def handle_incoming_event(self, event_name, data, kwargs):
-        self.debug(f"event: {event_name} d: {data} kwa: {kwargs})")
-
         try:
             if (
                 event_name == "call_service"
