@@ -51,7 +51,7 @@ charge_ev_when_cheepest:
     debug: yes
 """
 
-VERSION = 0.37
+VERSION = 0.38
 
 # Store all attributes every day to disk
 STORE_TO_FILE_EVERY = 60 * 60 * 24
@@ -355,14 +355,14 @@ class SmartCharging(hass.Hass):
 
         if self.data["~_active"] == "off":
             self.debug("Module is inactivated by user...")
-            self.status_state = "inactive"
-            self.status_attributes["reason"] = "Inactivated by user"
+            self.status_state = "disabled"
+            self.status_attributes["reason"] = "Disabled by user"
             self.update_status_entity()
             return True
 
         if self.get_entity_value(self.args["device_tracker"]) != "home":
             self.debug("EV is not home, aborting calculation...")
-            self.status_state = "disabled"
+            self.status_state = "inactive"
             self.status_attributes["reason"] = "EV is not home"
             self.update_status_entity()
             return True
