@@ -51,7 +51,7 @@ charge_ev_when_cheepest:
     debug: yes
 """
 
-VERSION = 0.36
+VERSION = 0.37
 
 # Store all attributes every day to disk
 STORE_TO_FILE_EVERY = 60 * 60 * 24
@@ -240,6 +240,7 @@ class SmartCharging(hass.Hass):
                         self.handle_incoming_event,
                         "call_service",
                         entity_id=entity_id,
+                        domain="switch",
                     )
                 )
                 self.debug(f"Registered service call handler for {entity_id}")
@@ -258,22 +259,35 @@ class SmartCharging(hass.Hass):
         self.debug(f"event: {event_name} d: {data} kwa: {kwargs})")
 
         try:
-            if event_name == "call_service":
-                if data["domain"] == "switch":
-                    entity_id = data["service_data"]["entity_id"]
-                    data_key = entity_id.replace("switch." + self.name, "~")
+            if (
+                event_name == "call_service"
+                and "domain" in kwargs
+                and "entity_id" in kwargs
+            ):
 
-                    if data_key in self.data:
-                        # When we set the state, self.new_state will be
-                        # triggered and the actual internal state will be
-                        # updated properly
-                        self.set_state(
-                            entity=entity_id,
-                            state=data["service"].replace("turn_", ""),
-                            attributes=self.status_attributes,
-                        )
+                if data["domain"] == kwargs["domain"]:
+
+                    entity_id = data["service_data"]["entity_id"]
+                    if (
+                        isinstance(entity_id, str)
+                        and entity_id == kwargs["entity_id"]
+                    ) or (
+                        isinstance(entity_id, list)
+                        and kwargs["entity_id"] in entity_id
+                    ):
+                        key = entity_id.replace("switch." + self.name, "~")
+
+                        if key in self.data:
+                            # When we set the state, self.new_state will be
+                            # triggered and the actual internal state will be
+                            # updated properly
+                            self.set_state(
+                                entity=kwargs["entity_id"],
+                                state=data["service"].replace("turn_", ""),
+                                attributes=self.status_attributes,
+                            )
         except Exception as e:
-            self.get_main_log.exception(f"Exception when handling event")
+            self.get_main_log().exception(f"Exception when handling event")
 
     def new_state(self, entity, attribute, old, new, kwargs):
         self.debug(f"NEW STATE!! {entity}.{attribute} = {new} ({old})")
@@ -374,9 +388,9 @@ class SmartCharging(hass.Hass):
             return True
 
         if self.charge_time_needed is not None:
-            self.status_attributes[
-                "charge_time_left"
-            ] = self.format_time(self.charge_time_needed)
+            self.status_attributes["charge_time_left"] = self.format_time(
+                self.charge_time_needed
+            )
 
         return self.start_stop_charging()
 
