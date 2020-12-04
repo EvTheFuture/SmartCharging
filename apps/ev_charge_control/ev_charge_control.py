@@ -51,7 +51,7 @@ charge_ev_when_cheepest:
     debug: yes
 """
 
-VERSION = 0.35
+VERSION = 0.36
 
 # Store all attributes every day to disk
 STORE_TO_FILE_EVERY = 60 * 60 * 24
@@ -366,7 +366,7 @@ class SmartCharging(hass.Hass):
         elif cs == self.status_complete:
             self.status_state = "complete"
             self.status_attributes["reason"] = "EV is charged"
-            self.status_attributes["charge_time_left"] = 0
+            self.status_attributes["charge_time_left"] = self.format_time(0)
             self.status_attributes["next_start"] = ""
             self.status_attributes["next_stop"] = ""
             self.status_attributes["slots"] = []
@@ -376,9 +376,15 @@ class SmartCharging(hass.Hass):
         if self.charge_time_needed is not None:
             self.status_attributes[
                 "charge_time_left"
-            ] = self.charge_time_needed
+            ] = self.format_time(self.charge_time_needed)
 
         return self.start_stop_charging()
+
+    def format_time(self, seconds):
+        h = int(seconds / 3600)
+        m = int(seconds / 60)
+
+        return f"{h:02}:{m:02}"
 
     def start_charging(self):
         try:
