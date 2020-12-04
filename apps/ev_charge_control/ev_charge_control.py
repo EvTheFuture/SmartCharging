@@ -51,7 +51,7 @@ charge_ev_when_cheepest:
     debug: yes
 """
 
-VERSION = "0.40 alpha"
+VERSION = "0.41 alpha"
 
 # Store all attributes every day to disk
 STORE_TO_FILE_EVERY = 60 * 60 * 24
@@ -624,11 +624,18 @@ class SmartCharging(hass.Hass):
             e, a = self.get_entity_and_attribute(pd["entity"])
             part = self.get_state(entity_id=e, attribute=a)
 
-            # Bail out if we miss data that is required
+            # Mark that we might miss required price info.
+            # If we have price info up to the time when we must be finished,
+            # then this is overridden
             if "required" in pd and pd["required"]:
                 if not len(part):
                     missing_price_info = True
                     continue
+
+                for p in part:
+                    if "value" not in p or p["value"] is None:
+                        missing_price_info = True
+                        break
 
             prices += part
 
@@ -654,9 +661,13 @@ class SmartCharging(hass.Hass):
                 (end - midnight_today).total_seconds()
             )
 
+            # If we have price info up to the point when we must
+            # be finished with charging, we ignore that we miss
+            # required price info.
             if (
                 missing_price_info
-                and must_be_done_by >= start_from_midnight_today
+                and must_be_done_by is not None
+                and must_be_done_by > start_from_midnight_today
                 and must_be_done_by <= end_from_midnight_today
             ):
                 missing_price_info = False
