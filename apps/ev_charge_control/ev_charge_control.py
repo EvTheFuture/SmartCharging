@@ -1,6 +1,6 @@
 """
     Smart Charging of EVs based on hourly price.
-    Copyright (C) 2020    Magnus Sandin
+    Copyright (C) 2020    Magnus Sandin <magnus.sandin@gmail.com>
 
     This program is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
