@@ -51,7 +51,7 @@ charge_ev_when_cheepest:
     debug: yes
 """
 
-VERSION = 0.38
+VERSION = "0.39 alpha"
 
 # Store all attributes every day to disk
 STORE_TO_FILE_EVERY = 60 * 60 * 24
@@ -76,6 +76,7 @@ ENTITIES = {
             "next_stop": "unknown",
             "slots": [],
             "reason": "",
+            "version": VERSION,
         },
     },
 }
@@ -394,7 +395,7 @@ class SmartCharging(hass.Hass):
 
     def format_time(self, seconds):
         h = int(seconds / 3600)
-        m = int(seconds / 60)
+        m = int(seconds / 60 - h * 60)
 
         return f"{h:02}:{m:02}"
 
