@@ -5,11 +5,12 @@ _Charge your Electric Vehicle when the utility rate is the lowest_
 
 Currently only Tesla is supported.
 
-This AppDaemon app require a sensor to get the hourly rate. Currently the Nordpol Custom Component is supported. It also requires the Tesla Integration to work.
+This [AppDaemon](https://appdaemon.readthedocs.io/en/latest/#) app for [Home Assistant](https://www.home-assistant.io/) require a sensor to get the hourly rate. Currently the [Nordpool](https://github.com/custom-components/nordpool) Custom Component is supported. It also requires the [Tesla Integration](https://www.home-assistant.io/integrations/tesla/) to work.
 
 ## Quick Example
 
-This is an example configuration that will make sure charging is completed by 07:30 in the morning
+This is an example configuration that will make sure charging is completed by 07:30 in the morning.
+Please Note: You need to change the entities to match your setup.
 ```
 charge_ev_when_cheepest:                                                                                                                                                      
     module: ev_charge_control                                                                                                                                                 
