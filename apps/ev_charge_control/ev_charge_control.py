@@ -51,7 +51,7 @@ charge_ev_when_cheepest:
     debug: yes
 """
 
-VERSION = "0.43 alpha"
+VERSION = "0.44 alpha"
 
 # Store all attributes every day to disk
 STORE_TO_FILE_EVERY = 60 * 60 * 24
@@ -146,6 +146,7 @@ class SmartCharging(hass.Hass):
         self.worker_thread.start()
 
         self.setup_listener("switch." + self.name + "_active")
+        self.setup_listener(self.args["finish_at_latest_by"])
         self.setup_listener(self.args["charger_switch"])
         self.setup_listener(self.args["charging_state"])
         self.setup_listener(self.args["device_tracker"])
@@ -253,6 +254,10 @@ class SmartCharging(hass.Hass):
 
     def setup_listener(self, entity):
         e, a = self.get_entity_and_attribute(entity)
+
+        if e is None:
+            self.debug(f"{entity} is not an entity, skipping listen_state")
+            return
 
         self.listen_state(callback=self.new_state, entity=e, attribute=a)
 
@@ -548,7 +553,7 @@ class SmartCharging(hass.Hass):
         else:
             self.stop_charging()
             self.status_state = "stopped"
-            self.status_attributes["reason"] = "Current rate to high"
+            self.status_attributes["reason"] = f"Current rate to high"
 
         self.update_status_entity()
         return True
@@ -588,10 +593,13 @@ class SmartCharging(hass.Hass):
     def get_entity_and_attribute(self, name):
         s = name.split(",")
 
-        if len(s) > 1:
-            return s[0].strip(), s[1].strip()
-        else:
-            return s[0].strip(), None
+        try:
+            if len(s) > 1:
+                return s[0].strip(), s[1].strip()
+            else:
+                return s[0].strip(), None
+        except Exception:
+            return None, None
 
     def get_price(self):
         if "price_data" not in self.args:
