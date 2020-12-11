@@ -51,7 +51,7 @@ charge_ev_when_cheepest:
     debug: yes
 """
 
-VERSION = "0.44 alpha"
+VERSION = "0.45"
 
 # Store all attributes every day to disk
 STORE_TO_FILE_EVERY = 60 * 60 * 24
@@ -76,6 +76,7 @@ ENTITIES = {
             "next_stop": "unknown",
             "slots": [],
             "reason": "",
+            "last_calculation": "unknown",
             "version": VERSION,
         },
     },
@@ -354,14 +355,17 @@ class SmartCharging(hass.Hass):
             )
 
     def calculate(self):
-        self.status_attributes["next_start"] = ""
-        self.status_attributes["next_stop"] = ""
-        self.status_attributes["slots"] = []
+        nowstr = self.datetime(aware=True).strftime("%H:%M")
+
+        self.status_attributes["last_calculation"] = nowstr
+        self.status_attributes["next_start"] = None
+        self.status_attributes["next_stop"] = None
+        self.status_attributes["slots"] = None
+        self.status_attributes["charge_time_left"] = None
 
         if self.data["~_active"] == "off":
             self.debug("Module is inactivated by user...")
             self.status_state = "disabled"
-            self.status_attributes["charge_time_left"] = ""
             self.status_attributes["reason"] = "Disabled by user"
             self.update_status_entity()
             return True
@@ -369,7 +373,6 @@ class SmartCharging(hass.Hass):
         if self.get_entity_value(self.args["device_tracker"]) != "home":
             self.debug("EV is not home, aborting calculation...")
             self.status_state = "inactive"
-            self.status_attributes["charge_time_left"] = "unknown"
             self.status_attributes["reason"] = "EV is not home"
             self.update_status_entity()
             return True
@@ -386,9 +389,6 @@ class SmartCharging(hass.Hass):
             self.status_state = "complete"
             self.status_attributes["reason"] = "EV is charged"
             self.status_attributes["charge_time_left"] = self.format_time(0)
-            self.status_attributes["next_start"] = ""
-            self.status_attributes["next_stop"] = ""
-            self.status_attributes["slots"] = []
             self.update_status_entity()
             return True
 
@@ -549,12 +549,11 @@ class SmartCharging(hass.Hass):
         if slot["start"] < now < slot["end"]:
             self.start_charging()
             self.status_state = "charging"
-            self.status_attributes["reason"] = "Current rate is low"
         else:
             self.stop_charging()
             self.status_state = "stopped"
-            self.status_attributes["reason"] = f"Current rate to high"
 
+        self.status_attributes["reason"] = f"Price is {slot['value']}"
         self.update_status_entity()
         return True
 
