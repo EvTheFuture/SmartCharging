@@ -553,7 +553,7 @@ class SmartCharging(hass.Hass):
             self.stop_charging()
             self.status_state = "stopped"
 
-        self.status_attributes["reason"] = f"Price is {slot['value']}"
+        self.status_attributes["reason"] = f"Price is {slot['price']}"
         self.update_status_entity()
         return True
 
