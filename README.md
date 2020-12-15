@@ -7,6 +7,8 @@ Currently only Tesla is supported.
 
 This [AppDaemon](https://appdaemon.readthedocs.io/en/latest/#) app for [Home Assistant](https://www.home-assistant.io/) require a sensor to get the hourly rate. Currently the [Nordpool](https://github.com/custom-components/nordpool) Custom Component is supported. It also requires the [Tesla Integration](https://www.home-assistant.io/integrations/tesla/) to work.
 
+[![buy-me-a-coffee](https://www.buymeacoffee.com/assets/img/custom_images/orange_img.png)](https://www.buymeacoffee.com/EvTheFuture)
+
 ## Quick Example
 
 This is an example configuration that will make sure charging is completed by 07:30 in the morning.
