@@ -106,7 +106,7 @@ class SmartCharging(hass.Hass):
 
         self.event_listeners = []
 
-        self.status_state = "uknown"
+        self.status_state = "unknown"
         self.status_attributes = copy.deepcopy(
             ENTITIES["~_status"]["attributes"]
         )
