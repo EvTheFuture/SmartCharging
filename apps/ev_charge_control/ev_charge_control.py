@@ -51,7 +51,7 @@ charge_ev_when_cheepest:
     debug: yes
 """
 
-VERSION = "0.45"
+VERSION = "0.46"
 
 # Store all attributes every day to disk
 STORE_TO_FILE_EVERY = 60 * 60 * 24
@@ -476,6 +476,7 @@ class SmartCharging(hass.Hass):
 
         self.debug(f"We need {self.charge_time_needed} seconds to charge")
 
+        current_slot = price[0]
         price = sorted(price, key=lambda i: i["price"])
 
         self.debug(f"Valid prices: {len(price)}")
@@ -518,7 +519,7 @@ class SmartCharging(hass.Hass):
                     + " at "
                     + s["end"].strftime("%H:%M")
                 ),
-                "price": s["price"],
+                "price": s['price'],
             }
             friendly_slots.append(slot)
 
@@ -553,7 +554,9 @@ class SmartCharging(hass.Hass):
             self.stop_charging()
             self.status_state = "stopped"
 
-        self.status_attributes["reason"] = f"Price is {slot['price']}"
+        self.status_attributes[
+            "reason"
+        ] = f"Price now {current_slot['price']:.2f}"
         self.update_status_entity()
         return True
 
