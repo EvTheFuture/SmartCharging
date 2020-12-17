@@ -9,6 +9,7 @@ This [AppDaemon](https://appdaemon.readthedocs.io/en/latest/#) app for [Home Ass
 
 [![buy-me-a-coffee](https://www.buymeacoffee.com/assets/img/custom_images/orange_img.png)](https://www.buymeacoffee.com/EvTheFuture)
 
+## Screenshots
 <p align="center" width="100%">
     <img src="https://user-images.githubusercontent.com/66333723/102418686-86c17300-3ffe-11eb-80fb-7e076810bd2f.jpg" width=240 alt="Screenshot">
     <img src="https://user-images.githubusercontent.com/66333723/102502005-60431c80-407e-11eb-8ab1-75537108f085.png" width=240 alt="Screenshot">
