@@ -9,10 +9,13 @@ This [AppDaemon](https://appdaemon.readthedocs.io/en/latest/#) app for [Home Ass
 
 [![buy-me-a-coffee](https://www.buymeacoffee.com/assets/img/custom_images/orange_img.png)](https://www.buymeacoffee.com/EvTheFuture)
 
+![Screenshot](https://user-images.githubusercontent.com/66333723/102418686-86c17300-3ffe-11eb-80fb-7e076810bd2f.jpg)
+
 ## Quick Example
 
-This is an example configuration that will make sure charging is completed by 07:30 in the morning.
-Please Note: You need to change the entities to match your setup.
+This is an example configuration that will make sure charging is completed by 07:30 in the morning. You can also enter an entity I'd of an input datetime (time only) entity in order to be able to easily change the time from Lovelace GUI
+
+**Please Note:** You need to change the entities to match your setup.
 ```
 charge_ev_when_cheepest:                                                                                                                                                      
     module: ev_charge_control                                                                                                                                                 
