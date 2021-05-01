@@ -218,6 +218,18 @@ class SmartCharging(hass.Hass):
     def debug(self, text):
         self.get_main_log().debug(text)
 
+    def remove_timer(self, th):
+        """Wrapper to cancel_timer with sanity checks
+
+        Parameters
+        ----------
+        th : str
+            Timer Handle from run_in
+        """
+        if th is not None and self.timer_running(th):
+            self.cancel_timer(th)
+            self.debug(f"Cancelled the timer with handle: {th}")
+
     def get_friendly_date(self, in_date):
         today = self.datetime(aware=True).date().today()
         tomorrow = today + timedelta(days=1)
@@ -299,8 +311,7 @@ class SmartCharging(hass.Hass):
 
         # Delay trigger to avoid multiple calculations when multiple entities
         # change at the same time
-        if self.run_calculations_handle is not None:
-            self.cancel_timer(self.run_calculations_handle)
+        self.remove_timer(self.run_calculations_handle)
 
         if entity.endswith(self.name + "_active"):
             self.data["~_active"] = new
@@ -381,7 +392,15 @@ class SmartCharging(hass.Hass):
             self.update_status_entity()
             return True
 
-        cs = self.get_entity_value(self.args["charging_state"]).lower()
+        cs = self.get_entity_value(self.args["charging_state"])
+        if cs is None:
+            self.error(f"Unable to read entity {self.args['charging_state']}")
+            self.status_state = "error"
+            self.status_attributes["reason"] = "Error reading 'charging_state'"
+            self.update_status_entity()
+            return True
+
+        cs = cs.lower()
         tl = self.get_entity_value(self.args["time_left"])
 
         self.debug(f"Current state is: {cs}")
