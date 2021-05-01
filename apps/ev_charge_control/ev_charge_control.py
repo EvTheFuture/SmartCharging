@@ -51,7 +51,7 @@ charge_ev_when_cheepest:
     debug: yes
 """
 
-VERSION = "0.47"
+VERSION = "0.50"
 
 # Store all attributes every day to disk
 STORE_TO_FILE_EVERY = 60 * 60 * 24
