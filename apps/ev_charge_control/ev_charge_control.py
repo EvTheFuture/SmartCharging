@@ -1,6 +1,6 @@
 """
     Smart Charging of EVs based on hourly price.
-    Copyright (C) 2020    Magnus Sandin <magnus.sandin@gmail.com>
+    Copyright (C) 2020-2022    Magnus Sandin <magnus.sandin@gmail.com>
 
     This program is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -51,7 +51,7 @@ charge_ev_when_cheepest:
     debug: yes
 """
 
-VERSION = "0.50"
+VERSION = "0.51"
 
 # Store all attributes every day to disk
 STORE_TO_FILE_EVERY = 60 * 60 * 24
@@ -272,7 +272,8 @@ class SmartCharging(hass.Hass):
             self.debug(f"{entity} is not an entity, skipping listen_state")
             return
 
-        self.listen_state(callback=self.new_state, entity=e, attribute=a)
+        self.log(f"Setting up listener for entity: {e}, attriute: {a}")
+        self.listen_state(callback=self.new_state, entity_id=e, attribute=a)
 
     def handle_incoming_event(self, event_name, data, kwargs):
         try:
@@ -749,9 +750,9 @@ class SmartCharging(hass.Hass):
 
     def update_status_entity(self):
         entity_id = "sensor." + self.name + "_status"
+        entity = self.get_entity(entity_id)
 
-        self.set_state(
-            entity=entity_id,
+        entity.set_state(
             state=self.status_state,
             attributes=self.status_attributes,
         )
