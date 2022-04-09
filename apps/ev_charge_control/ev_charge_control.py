@@ -51,7 +51,7 @@ charge_ev_when_cheepest:
     debug: yes
 """
 
-VERSION = "0.51"
+VERSION = "0.52"
 
 # Store all attributes every day to disk
 STORE_TO_FILE_EVERY = 60 * 60 * 24
@@ -750,9 +750,9 @@ class SmartCharging(hass.Hass):
 
     def update_status_entity(self):
         entity_id = "sensor." + self.name + "_status"
-        entity = self.get_entity(entity_id)
 
-        entity.set_state(
+        self.set_state(
+            entity_id=entity_id,
             state=self.status_state,
             attributes=self.status_attributes,
         )
