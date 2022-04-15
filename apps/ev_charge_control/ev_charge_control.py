@@ -51,7 +51,7 @@ charge_ev_when_cheepest:
     debug: yes
 """
 
-VERSION = "0.52"
+VERSION = "0.53"
 
 # Store all attributes every day to disk
 STORE_TO_FILE_EVERY = 60 * 60 * 24
@@ -64,7 +64,9 @@ ENTITIES = {
     "~_active": {
         "type": "switch",
         "state": "on",
-        "attributes": {"friendly_name": "Smart Charging Active",},
+        "attributes": {
+            "friendly_name": "Smart Charging Active",
+        },
     },
     "~_status": {
         "type": "sensor",
@@ -245,7 +247,9 @@ class SmartCharging(hass.Hass):
             self.debug(f"Will setup entity: {entity_id} -> {v}")
 
             self.set_state(
-                entity_id, state=self.data[k], attributes=v["attributes"],
+                entity_id=entity_id,
+                state=self.data[k],
+                attributes=v["attributes"],
             )
             self.debug(f"Created entity {entity_id}")
 
@@ -300,7 +304,7 @@ class SmartCharging(hass.Hass):
                             # triggered and the actual internal state will be
                             # updated properly
                             self.set_state(
-                                entity=kwargs["entity_id"],
+                                entity_id=kwargs["entity_id"],
                                 state=data["service"].replace("turn_", ""),
                                 attributes=ENTITIES[key]["attributes"],
                             )
@@ -543,7 +547,7 @@ class SmartCharging(hass.Hass):
                     + " at "
                     + s["end"].strftime("%H:%M")
                 ),
-                "price": s['price'],
+                "price": s["price"],
             }
             friendly_slots.append(slot)
 
