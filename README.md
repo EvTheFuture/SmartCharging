@@ -31,13 +31,13 @@ charge_ev_when_cheepest:
           required: Yes                                                                                                                                       
         - entity: sensor.nordpool_kwh_se3_sek_3_1000_025,raw_tomorrow                              
           required: Yes                                                                             
-    charger_switch: switch.model_3_charger_switch                                                  
-    charging_state: binary_sensor.model_3_charger_sensor,charging_state                   
+    charger_switch: switch.model_3_charger                                                  
+    charging_state: binary_sensor.model_3_charger,charging_state                   
     charging_state_stopped: Stopped
     charging_state_charging: Charging
     charging_state_complete: Complete
     device_tracker: device_tracker.model_3_location_tracker
-    time_left: sensor.model_3_charging_rate_sensor,time_left
+    time_left: sensor.model_3_charging_rate,time_left
     start_by_the_latest_at: "03:00"
     debug: no
 ```
