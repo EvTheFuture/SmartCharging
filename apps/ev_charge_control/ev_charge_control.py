@@ -51,7 +51,7 @@ charge_ev_when_cheepest:
     debug: yes
 """
 
-VERSION = "0.53"
+VERSION = "0.54"
 
 # Store all attributes every day to disk
 STORE_TO_FILE_EVERY = 60 * 60 * 24
@@ -87,7 +87,6 @@ import appdaemon.plugins.hass.hassapi as hass
 import copy
 import json
 import queue
-import threading
 
 from datetime import datetime
 from datetime import timedelta
@@ -106,6 +105,8 @@ class SmartCharging(hass.Hass):
 
         self.log("Starting....")
 
+        self.debug(f"App pin state: {self.get_app_pin()}")
+        self.debug(f"Current thread: {self.get_pin_thread()}")
         self.event_listeners = []
 
         self.status_state = "unknown"
@@ -136,18 +137,6 @@ class SmartCharging(hass.Hass):
             "charging_state_stopped", "stopped"
         ).lower()
 
-        self.abort = False
-        self.worker_thread_event = threading.Event()
-
-        # This thread handle recalculations when new price period starts and
-        # when an entity attribute we listen for change. set self.abort to True
-        # to stop execution of this thread
-        self.worker_thread = threading.Thread(
-            target=self.worker_thread, name="Worker Thread"
-        )
-        self.worker_thread.daemon = True
-        self.worker_thread.start()
-
         self.setup_listener("switch." + self.name + "_active")
         self.setup_listener(self.args["finish_at_latest_by"])
         self.setup_listener(self.args["charger_switch"])
@@ -166,7 +155,11 @@ class SmartCharging(hass.Hass):
             interval=STORE_TO_FILE_EVERY,
         )
 
+        # Trigger an initial calculation
+        self.schedule_worker(1)
+
     def terminate(self):
+        self.debug("Will terminate...")
         self.save_persistance_file()
 
         self.abort = True
@@ -175,11 +168,6 @@ class SmartCharging(hass.Hass):
         for l in self.event_listeners:
             self.cancel_listen_event(l)
 
-        # Inform the worker thread to wake up
-        self.worker_thread_event.set()
-
-        # Wait for it to finish before we do
-        self.worker_thread.join()
         self.debug("Finished clean up process, bye bye...")
 
     def load_persistance_file(self):
@@ -314,70 +302,71 @@ class SmartCharging(hass.Hass):
     def new_state(self, entity, attribute, old, new, kwargs):
         self.debug(f"NEW STATE!! {entity}.{attribute} = {new} ({old})")
 
-        # Delay trigger to avoid multiple calculations when multiple entities
-        # change at the same time
-        self.remove_timer(self.run_calculations_handle)
+        run_after = DELAY_AFTER_STATE_CHANGE
 
         if entity.endswith(self.name + "_active"):
             self.data["~_active"] = new
             if new == "off":
                 self.debug("Trigger Calculations Immedietly...")
-                self.trigger_calculation()
-                return
+                run_after = 0
 
-        self.debug("Scheduling Calculations...")
-        self.run_calculations_handle = self.run_in(
-            self.trigger_calculation, DELAY_AFTER_STATE_CHANGE
+        # Delay trigger to avoid multiple calculations when multiple entities
+        # change at the same time
+        self.schedule_worker(run_after)
+
+    def schedule_worker(self, delay):
+        self.remove_timer(self.run_calculations_handle)
+
+        self.debug(f"Scheduling Calculations to run after {delay} seconds...")
+        self.run_calculations_handle = self.run_in(self.worker, delay)
+
+    def worker(self, kwargs):
+        self.debug(f"Current thread: {self.get_pin_thread()}")
+
+        try:
+            self.debug("worker: Starting calculation...")
+            retry = not self.calculate()
+        except Exception as e:
+            self.get_main_log().exception("Unexpected exception...")
+            retry = True
+
+        # Just to make sure we can't get a negative number
+        # we store the time before creating the price list
+        now = self.datetime(aware=True)
+
+        self.debug(f"worker: now is: {now}")
+        price = self.get_price()
+
+        if price is not None and len(price):
+            sleep_time = (price[0]["end"] - now).total_seconds()
+
+            if sleep_time > MAX_TIME_FOR_WORKER_TO_SLEEP:
+                sleep_time = MAX_TIME_FOR_WORKER_TO_SLEEP
+        else:
+            sleep_time = MAX_TIME_FOR_WORKER_TO_SLEEP
+
+        if retry and sleep_time > RETRY_AFTER_FAILURE:
+            sleep_time = RETRY_AFTER_FAILURE
+
+        self.schedule_worker(sleep_time)
+
+        self.info(
+            f"worker: Done for now. Will run again in {sleep_time} seconds..."
         )
 
-    def trigger_calculation(self, kwargs=None):
-        self.worker_thread_event.set()
-
-    def worker_thread(self):
-        while not self.abort:
-            try:
-                retry = not self.calculate()
-            except Exception as e:
-                self.get_main_log().exception("Unexpected exception...")
-                retry = True
-
-            # Just to make sure we cant get a negative number
-            # we store the time before creating the price list
-            now = self.datetime(aware=True)
-
-            price = self.get_price()
-            if price is not None and len(price):
-                sleep_time = (price[0]["end"] - now).total_seconds()
-                if sleep_time > MAX_TIME_FOR_WORKER_TO_SLEEP:
-                    sleep_time = MAX_TIME_FOR_WORKER_TO_SLEEP
-            else:
-                sleep_time = MAX_TIME_FOR_WORKER_TO_SLEEP
-
-            if retry and sleep_time > RETRY_AFTER_FAILURE:
-                sleep_time = RETRY_AFTER_FAILURE
-
-            time_when_going_to_sleep = self.datetime(aware=True)
-            self.debug(f"Will try to sleep for {sleep_time} seconds")
-            self.worker_thread_event.wait(sleep_time)
-
-            self.worker_thread_event.clear()
-
-            time_slept = (
-                self.datetime(aware=True) - time_when_going_to_sleep
-            ).total_seconds()
-
-            self.debug(
-                f"Woke up inside worker thread after {time_slept} seconds"
-            )
-
     def calculate(self):
+        self.debug("Time to calculate...")
         nowstr = self.datetime(aware=True).strftime("%H:%M")
+
+        self.debug(f"nowstr: {nowstr}")
 
         self.status_attributes["last_calculation"] = nowstr
         self.status_attributes["next_start"] = None
         self.status_attributes["next_stop"] = None
         self.status_attributes["slots"] = None
         self.status_attributes["charge_time_left"] = None
+
+        self.debug(f"status: {self.status_attributes}")
 
         if self.data["~_active"] == "off":
             self.debug("Module is inactivated by user...")
@@ -397,8 +386,11 @@ class SmartCharging(hass.Hass):
             self.update_status_entity()
             return True
 
+        self.debug("Trying to get current charging state...")
         cs = self.get_entity_value(self.args["charging_state"])
+        self.debug(f"cs: {cs}")
         if cs is None:
+            self.debug("Unable to read charging state...")
             self.error(f"Unable to read entity {self.args['charging_state']}")
             self.status_state = "error"
             self.status_attributes["reason"] = "Error reading 'charging_state'"
@@ -408,7 +400,7 @@ class SmartCharging(hass.Hass):
         cs = cs.lower()
         tl = self.get_entity_value(self.args["time_left"])
 
-        self.debug(f"Current state is: {cs}")
+        self.debug(f"Current state is: {cs}, time left: {tl}")
         if cs == self.status_charging:
             if tl > 0:
                 self.charge_time_needed = int(tl * 3600)
@@ -462,6 +454,8 @@ class SmartCharging(hass.Hass):
             return False
 
     def start_stop_charging(self):
+        self.debug("Entering start_stop_charging...")
+
         if self.charge_time_needed is None:
             self.log("Starting to charge to calculate time needed")
             self.status_attributes["charge_time_left"] = "unknown"
@@ -754,6 +748,8 @@ class SmartCharging(hass.Hass):
 
     def update_status_entity(self):
         entity_id = "sensor." + self.name + "_status"
+
+        self.debug(f"Updating status entity with: {self.status_state}")
 
         self.set_state(
             entity_id=entity_id,
