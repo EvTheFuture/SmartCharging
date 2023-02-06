@@ -51,12 +51,12 @@ charge_ev_when_cheepest:
     debug: yes
 """
 
-VERSION = "0.54.1"
+VERSION = "0.54.3"
 
 # Store all attributes every day to disk
 STORE_TO_FILE_EVERY = 60 * 60 * 24
 
-DELAY_AFTER_STATE_CHANGE = 30.0
+DELAY_AFTER_STATE_CHANGE = 5.0
 MAX_TIME_FOR_WORKER_TO_SLEEP = 3600  # 1 hour
 RETRY_AFTER_FAILURE = 60  # 1 minute
 
@@ -93,7 +93,6 @@ from datetime import timedelta
 from datetime import time
 from dateutil import parser
 from dateutil import tz
-
 
 class SmartCharging(hass.Hass):
 
@@ -136,6 +135,8 @@ class SmartCharging(hass.Hass):
         self.status_stopped = self.get_config_value(
             "charging_state_stopped", "stopped"
         ).lower()
+
+        self.time_when_charging_started = self.datetime(aware=True)
 
         self.setup_listener("switch." + self.name + "_active")
         self.setup_listener(self.args["finish_at_latest_by"])
@@ -251,6 +252,10 @@ class SmartCharging(hass.Hass):
                     )
                 )
                 self.debug(f"Registered service call handler for {entity_id}")
+
+    def get_entity_last_changed(self, entity):
+        e, a = self.get_entity_and_attribute(entity)
+        return self.get_state(entity_id=e, attribute="last_changed")
 
     def get_entity_value(self, entity):
         e, a = self.get_entity_and_attribute(entity)
@@ -398,17 +403,30 @@ class SmartCharging(hass.Hass):
             return True
 
         cs = cs.lower()
+        cs_lc = self.get_entity_last_changed(self.args["charging_state"])
+
         tl = self.get_entity_value(self.args["time_left"])
+        tl_lc = self.get_entity_last_changed(self.args["time_left"])
+
+        self.debug(f"========== cs_lc: {cs_lc} ---- tl_lc: {tl_lc}")
+
+        time_diff = parser.parse(cs_lc) - parser.parse(tl_lc)
+
+        self.debug(f"========== time_diff: {time_diff}")
 
         self.debug(f"Current state is: {cs}, time left: {tl}")
+
         if cs == self.status_charging:
-            if tl > 0:
+            if tl > 0 and time_diff.total_seconds() < 0:
                 self.charge_time_needed = int(tl * 3600)
+            else:
+                self.charge_time_needed = None
 
         elif cs == self.status_complete:
             self.status_state = "complete"
             self.status_attributes["reason"] = "EV is charged"
             self.status_attributes["charge_time_left"] = self.format_time(0)
+            self.charge_time_needed = None
             self.update_status_entity()
             # Just in case we charged to little
             self.start_charging()
