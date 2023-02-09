@@ -431,6 +431,11 @@ class SmartCharging(hass.Hass):
             # Just in case we charged to little
             self.start_charging()
             return True
+        elif cs == self.status_stopped and self.status_state == "calculating":
+            # Make sure we actually get time left
+            self.charge_time_needed = None
+            self.start_charging()
+            return True
 
         if self.charge_time_needed is not None:
             self.status_attributes["charge_time_left"] = self.format_time(
