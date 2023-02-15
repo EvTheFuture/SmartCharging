@@ -381,6 +381,7 @@ class SmartCharging(hass.Hass):
 
             self.status_state = "disabled"
             self.status_attributes["reason"] = "Disabled by user"
+            self.charge_time_needed = None
             self.update_status_entity()
             return True
 
@@ -388,6 +389,7 @@ class SmartCharging(hass.Hass):
             self.debug("EV is not home, aborting calculation...")
             self.status_state = "inactive"
             self.status_attributes["reason"] = "EV is not home"
+            self.charge_time_needed = None
             self.update_status_entity()
             return True
 
@@ -400,6 +402,7 @@ class SmartCharging(hass.Hass):
             self.status_state = "error"
             self.status_attributes["reason"] = "Error reading 'charging_state'"
             self.update_status_entity()
+            self.charge_time_needed = None
             return True
 
         cs = cs.lower()
