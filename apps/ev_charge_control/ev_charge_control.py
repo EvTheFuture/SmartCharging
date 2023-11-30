@@ -28,6 +28,7 @@ charging_state_stopped:     O: String that indicate not charging
 charging_state_charging:    O: String that indicate charging
 charging_state_complete:    O: String that indicate charging complete
 device_tracker:             O: Sensor indicating if EV is home
+device_tracker_value_home:  O: Value of senor when vehicle is home (default is home)
 time_left:                  M: Time left in hours (float) entity_id[,attribute]
 
 
@@ -47,6 +48,7 @@ charge_ev_when_cheepest:
     charging_state_charging: Charging
     charging_state_complete: Complete
     device_tracker: device_tracker.model_3_location_tracker
+    device_tracker_value_home: home
     time_left: sensor.model_3_charging_rate_sensor,time_left
     debug: yes
 """
@@ -97,6 +99,7 @@ from dateutil import tz
 class SmartCharging(hass.Hass):
 
     data = {}
+    home_tag = "home"
 
     def initialize(self):
         if "debug" in self.args and self.args["debug"]:
@@ -147,6 +150,10 @@ class SmartCharging(hass.Hass):
 
         for pd in self.args["price_data"]:
             self.setup_listener(pd["entity"])
+
+        if "device_tracker_value_home" in self.args:
+            self.home_tag = self.args["device_tracker_value_home"]
+            self.debug(f"Setting home tag to: {self.home_tag}")
 
         # Save the current state of all covers every STORE_COVER_STATE_EVERY
         # seconds
@@ -385,7 +392,7 @@ class SmartCharging(hass.Hass):
             self.update_status_entity()
             return True
 
-        if self.get_entity_value(self.args["device_tracker"]) != "home":
+        if self.get_entity_value(self.args["device_tracker"]) != self.home_tag:
             self.debug("EV is not home, aborting calculation...")
             self.status_state = "inactive"
             self.status_attributes["reason"] = "EV is not home"
